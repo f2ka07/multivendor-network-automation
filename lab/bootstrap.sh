@@ -62,8 +62,22 @@ ensure_containerlab() {
     info "Containerlab already installed: $(containerlab version 2>/dev/null | head -1 || true)"
     return 0
   fi
-  info "Installing Containerlab..."
-  curl -sL https://containerlab.dev | sudo bash
+
+  local install_url="https://get.containerlab.dev"
+  info "Installing Containerlab from ${install_url}..."
+
+  local installer
+  installer="$(curl -fsSL "$install_url")" || die "Failed to download Containerlab installer from ${install_url}"
+
+  if [[ "${installer:0:1}" == "<" ]]; then
+    die "Installer returned HTML (wrong URL or network proxy). Use: bash -c \"\$(curl -fsSL ${install_url})\""
+  fi
+
+  # Official install script (deb/rpm); may prompt for sudo password on WSL
+  bash -c "$installer"
+
+  command -v containerlab >/dev/null 2>&1 || die "Containerlab install finished but 'containerlab' not in PATH"
+  info "Containerlab installed: $(containerlab version 2>/dev/null | head -1 || true)"
 }
 
 pull_images() {
