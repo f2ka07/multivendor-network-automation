@@ -17,8 +17,28 @@ is_root() { [[ "${EUID:-$(id -u)}" -eq 0 ]]; }
 
 install_linux_packages() {
   if is_wsl; then
-    info "WSL detected — use Docker Desktop on Windows (WSL integration enabled)."
-    info "Skipping apt/docker install inside WSL."
+    if command -v docker >/dev/null 2>&1 && docker info 2>/dev/null | grep -qi 'docker desktop'; then
+      info "WSL + Docker Desktop detected."
+      info "DevNet scripts work with Docker Desktop, but Containerlab needs native Docker inside WSL."
+      info "See: https://containerlab.dev/windows/ (disable Desktop WSL integration, then install docker-ce)."
+    else
+      info "WSL detected — installing Docker Engine inside WSL (required for Containerlab)."
+      if ! is_root; then
+        die "On WSL run: sudo bash lab/bootstrap.sh"
+      fi
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update
+      apt-get install -y git python3 python3-venv python3-pip curl jq ca-certificates
+      if ! command -v docker >/dev/null 2>&1; then
+        info "Installing Docker Engine (not Docker Desktop integration)..."
+        curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+        sh /tmp/get-docker.sh
+      fi
+      if [[ -n "${SUDO_USER:-}" ]]; then
+        usermod -aG docker "$SUDO_USER" || true
+      fi
+      info "Log out of WSL and back in so docker group membership applies."
+    fi
     return 0
   fi
 
@@ -48,11 +68,15 @@ install_linux_packages() {
 
 ensure_docker() {
   if docker info >/dev/null 2>&1; then
-    info "Docker daemon is running."
+    if is_wsl && docker info 2>/dev/null | grep -qi 'docker desktop'; then
+      info "Docker Desktop is running (OK for DevNet; Containerlab may fail with 'Link not found')."
+    else
+      info "Docker daemon is running."
+    fi
     return 0
   fi
   if is_wsl; then
-    die "Start Docker Desktop on Windows and enable Settings → Resources → WSL integration → your Ubuntu distro."
+    die "Docker not running in WSL. For Containerlab: disable Docker Desktop WSL integration, install docker-ce (sudo bash lab/bootstrap.sh), then: sudo service docker start"
   fi
   die "Docker is not running. Start the service: sudo systemctl start docker"
 }
@@ -127,6 +151,8 @@ Next (every lab session):
   ./lab/lab-down.sh               # when using LAB_MODE=containerlab
 
 WSL2: keep the repo under ~/ (not /mnt/c/). Allocate 8GB+ RAM in .wslconfig for Containerlab.
+Containerlab on WSL requires Docker Engine inside WSL (not Docker Desktop integration).
+  https://containerlab.dev/windows/
 EOF
 }
 

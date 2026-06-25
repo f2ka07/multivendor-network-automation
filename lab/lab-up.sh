@@ -49,6 +49,9 @@ lab_up_containerlab() {
 
   INSPECT_JSON="$(mktemp)"
   INV_OUT="${INVENTORY_FILE:-$REPO_ROOT/inventory/hosts.yaml}"
+  if [[ "$INV_OUT" != /* ]]; then
+    INV_OUT="$REPO_ROOT/$INV_OUT"
+  fi
 
   echo "==> Pulling Nokia SR Linux image (if needed)..."
   docker pull ghcr.io/nokia/srlinux:latest >/dev/null 2>&1 || true

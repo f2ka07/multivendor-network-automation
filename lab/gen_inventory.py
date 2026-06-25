@@ -18,13 +18,45 @@ def platform_for(name: str) -> str:
     return "linux"
 
 
+def extract_containers(data: object) -> list[dict]:
+    if isinstance(data, list):
+        return data
+    if not isinstance(data, dict):
+        return []
+
+    if "containers" in data and isinstance(data["containers"], list):
+        return data["containers"]
+    if "nodes" in data and isinstance(data["nodes"], list):
+        return data["nodes"]
+
+    # containerlab inspect -f json groups nodes by lab name:
+    # {"multivendor-intro": [{...}, {...}]}
+    containers: list[dict] = []
+    for value in data.values():
+        if isinstance(value, list):
+            containers.extend(item for item in value if isinstance(item, dict))
+    return containers
+
+
+def mgmt_ip(item: dict) -> str:
+    raw = item.get("ipv4_address") or item.get("mgmt_ip") or item.get("name") or ""
+    return str(raw).split("/")[0].strip()
+
+
+def short_name(container_name: str) -> str:
+    # clab-multivendor-intro-nokia-spine -> spine
+    if "-" in container_name:
+        return container_name.rsplit("-", 1)[-1]
+    return container_name
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print("Usage: gen_inventory.py <inspect.json>", file=sys.stderr)
         return 1
 
     data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-    containers = data.get("containers") or data.get("nodes") or []
+    containers = extract_containers(data)
 
     nokia_user = os.environ.get("NOKIA_USER", "admin")
     nokia_pass = os.environ.get("NOKIA_PASS", "NokiaSrl1!")
@@ -36,8 +68,8 @@ def main() -> int:
         name = item.get("name") or item.get("container_name")
         if not name:
             continue
-        short = name.split("-")[-1] if "-" in name else name
-        host = item.get("ipv4_address") or item.get("mgmt_ip") or name
+        short = short_name(name)
+        host = mgmt_ip(item)
         plat = platform_for(name)
         if plat == "nokia_srlinux":
             user, password = nokia_user, nokia_pass
