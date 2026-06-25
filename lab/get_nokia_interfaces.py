@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""gNMI GET OpenConfig interfaces from a Nokia SR Linux node (Containerlab)."""
+"""gNMI GET Nokia SR Linux interfaces via native YANG path (Containerlab)."""
 
 from __future__ import annotations
 
@@ -224,7 +224,7 @@ def main() -> int:
     else:
         print(f"Connecting gNMI to {matched_node or node!r} at {host}:{port}", file=sys.stderr)
 
-    paths = ["openconfig-interfaces:interfaces"]
+    paths = ["interface"]
     try:
         result = gnmi_get(host, port, user, password, paths, matched_node or node)
     except Exception as exc:
