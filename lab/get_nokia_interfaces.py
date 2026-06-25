@@ -130,13 +130,35 @@ def node_for_ip(hosts: dict[str, dict[str, str]], ip: str) -> tuple[str | None, 
     return None, {}
 
 
-def gnmi_get(host: str, port: int, user: str, password: str, paths: list[str]) -> object:
-    """Connect with skip_verify; fall back to insecure for containerlab self-signed certs."""
+def tls_overrides(host: str, node: str) -> list[str | None]:
+    """CN/SAN values from containerlab Nokia SR Linux cert."""
+    return [
+        None,
+        host,
+        node,
+        f"{node}.multivendor-intro.io",
+        f"clab-multivendor-intro-nokia-{node}",
+    ]
+
+
+def gnmi_get(host: str, port: int, user: str, password: str, paths: list[str], node: str) -> object:
+    """Nokia SR Linux requires TLS (skip_verify) and json_ietf encoding."""
+    os.environ.setdefault("GRPC_SSL_CIPHER_SUITES", "ECDHE-RSA-AES128-GCM-SHA256:HIGH")
+
+    custom = os.environ.get("NOKIA_TLS_OVERRIDE")
+    overrides = [custom] if custom else []
+    overrides.extend(tls_overrides(host, node))
+
     errors: list[str] = []
-    for kwargs in (
-        {"skip_verify": True},
-        {"insecure": True},
-    ):
+    seen: set[str | None] = set()
+    for override in overrides:
+        if override in seen:
+            continue
+        seen.add(override)
+
+        kwargs: dict[str, object] = {"skip_verify": True}
+        if override:
+            kwargs["override"] = override
         try:
             with gNMIclient(
                 target=(host, str(port)),
@@ -144,9 +166,11 @@ def gnmi_get(host: str, port: int, user: str, password: str, paths: list[str]) -
                 password=password,
                 **kwargs,
             ) as gc:
-                return gc.get(path=paths, encoding="json")
+                return gc.get(path=paths, encoding="json_ietf")
         except Exception as exc:
-            errors.append(f"{kwargs}: {exc!r}")
+            label = override or "default"
+            errors.append(f"override={label!r}: {exc!r}")
+
     raise RuntimeError("; ".join(errors))
 
 
@@ -200,20 +224,17 @@ def main() -> int:
     else:
         print(f"Connecting gNMI to {matched_node or node!r} at {host}:{port}", file=sys.stderr)
 
-    paths = [
-        "openconfig-interfaces:interfaces",
-        "/interfaces/interface",
-    ]
+    paths = ["openconfig-interfaces:interfaces"]
     try:
-        result = gnmi_get(host, port, user, password, paths)
+        result = gnmi_get(host, port, user, password, paths, matched_node or node)
     except Exception as exc:
         nokia_ips = nokia_nodes(hosts)
         print(
             f"gNMI GET failed for {host}:{port} — {exc}\n"
             f"Nokia nodes in inventory: {nokia_ips or 'none'}\n"
-            "172.20.20.4 is usually linux-host, not Nokia — use spine/leaf IP from:\n"
+            "Check gNMI on the node (SSH): info from state system gnmi-server\n"
             "  sudo containerlab inspect -t lab/topology.clab.yml\n"
-            "Set NOKIA_NODE=spine or NOKIA_MGMT_HOST=<nokia-spine-ip> in lab/.env.\n"
+            "Set NOKIA_NODE=spine|leaf and matching NOKIA_MGMT_HOST from inspect.\n"
             "Wait ~60s after deploy for SR Linux gNMI to start.",
             file=sys.stderr,
         )
