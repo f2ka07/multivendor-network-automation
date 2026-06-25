@@ -39,8 +39,8 @@ lab_up_devnet() {
 }
 
 lab_up_containerlab() {
-  command -v containerlab >/dev/null 2>&1 || die "containerlab not installed (instructor must pre-install on EC2)."
-  command -v docker >/dev/null 2>&1 || die "docker not installed."
+  command -v containerlab >/dev/null 2>&1 || die "containerlab not installed — run: bash lab/bootstrap.sh"
+  docker info >/dev/null 2>&1 || die "Docker not running — start Docker Desktop (WSL) or: sudo systemctl start docker"
 
   TOPO="${TOPOLOGY_FILE:-$SCRIPT_DIR/topology.clab.yml}"
   [[ -f "$TOPO" ]] || die "Topology not found: $TOPO"
