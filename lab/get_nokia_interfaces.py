@@ -98,17 +98,56 @@ def hosts_from_containerlab(topo: Path) -> dict[str, dict[str, str]]:
 
 def pick_host(hosts: dict[str, dict[str, str]], node: str) -> tuple[str | None, str | None]:
     if node in hosts:
-        return hosts[node].get("hostname"), node
+        data = hosts[node]
+        if data.get("platform") == "nokia_srlinux":
+            return data.get("hostname"), node
 
     for name, data in hosts.items():
-        if node in name or name in node:
+        if data.get("platform") != "nokia_srlinux":
+            continue
+        if name == node or name.endswith(f"-{node}"):
             return data.get("hostname"), name
 
     for name, data in hosts.items():
-        if "nokia_srlinux" in data.get("platform", ""):
+        if data.get("platform") == "nokia_srlinux":
             return data.get("hostname"), name
 
     return None, None
+
+
+def nokia_nodes(hosts: dict[str, dict[str, str]]) -> dict[str, str]:
+    return {
+        name: data["hostname"]
+        for name, data in hosts.items()
+        if data.get("platform") == "nokia_srlinux" and data.get("hostname")
+    }
+
+
+def node_for_ip(hosts: dict[str, dict[str, str]], ip: str) -> tuple[str | None, dict[str, str]]:
+    for name, data in hosts.items():
+        if data.get("hostname") == ip:
+            return name, data
+    return None, {}
+
+
+def gnmi_get(host: str, port: int, user: str, password: str, paths: list[str]) -> object:
+    """Connect with skip_verify; fall back to insecure for containerlab self-signed certs."""
+    errors: list[str] = []
+    for kwargs in (
+        {"skip_verify": True},
+        {"insecure": True},
+    ):
+        try:
+            with gNMIclient(
+                target=(host, str(port)),
+                username=user,
+                password=password,
+                **kwargs,
+            ) as gc:
+                return gc.get(path=paths, encoding="json")
+        except Exception as exc:
+            errors.append(f"{kwargs}: {exc!r}")
+    raise RuntimeError("; ".join(errors))
 
 
 def main() -> int:
@@ -125,11 +164,23 @@ def main() -> int:
     hosts = load_inventory_hosts(inventory)
     if not hosts:
         hosts = hosts_from_containerlab(resolve_topology_path(repo_root))
+    elif not nokia_nodes(hosts):
+        hosts.update(hosts_from_containerlab(resolve_topology_path(repo_root)))
 
     host = os.environ.get("NOKIA_MGMT_HOST")
     matched_node = node
     if not host:
         host, matched_node = pick_host(hosts, node)
+    else:
+        ip_name, ip_data = node_for_ip(hosts, host)
+        if ip_data and ip_data.get("platform") != "nokia_srlinux":
+            nokia = nokia_nodes(hosts)
+            print(
+                f"NOKIA_MGMT_HOST={host} is {ip_name!r} (not Nokia). "
+                f"Using Nokia node instead: {nokia}",
+                file=sys.stderr,
+            )
+            host, matched_node = pick_host(hosts, node)
 
     if not host:
         available = ", ".join(sorted(hosts)) or "(no Nokia nodes found)"
@@ -146,19 +197,24 @@ def main() -> int:
 
     if matched_node and matched_node != node:
         print(f"Using inventory node {matched_node!r} -> {host}", file=sys.stderr)
+    else:
+        print(f"Connecting gNMI to {matched_node or node!r} at {host}:{port}", file=sys.stderr)
 
+    paths = [
+        "openconfig-interfaces:interfaces",
+        "/interfaces/interface",
+    ]
     try:
-        with gNMIclient(
-            target=(host, port),
-            attribute=(user, password),
-            override="ip",
-            skip_verify=True,
-        ) as gc:
-            result = gc.get(path=["/interfaces/interface"], encoding="json")
+        result = gnmi_get(host, port, user, password, paths)
     except Exception as exc:
+        nokia_ips = nokia_nodes(hosts)
         print(
             f"gNMI GET failed for {host}:{port} — {exc}\n"
-            "Ensure Containerlab is up and the node has finished booting (~30s after deploy).",
+            f"Nokia nodes in inventory: {nokia_ips or 'none'}\n"
+            "172.20.20.4 is usually linux-host, not Nokia — use spine/leaf IP from:\n"
+            "  sudo containerlab inspect -t lab/topology.clab.yml\n"
+            "Set NOKIA_NODE=spine or NOKIA_MGMT_HOST=<nokia-spine-ip> in lab/.env.\n"
+            "Wait ~60s after deploy for SR Linux gNMI to start.",
             file=sys.stderr,
         )
         return 1
