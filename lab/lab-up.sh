@@ -35,7 +35,9 @@ lab_up_devnet() {
   echo "    NETCONF:  ${DEVNET_NETCONF_PORT:-830}"
   echo "    RESTCONF: ${DEVNET_RESTCONF_PORT:-443}"
   echo ""
-  echo "Next: python lab/get_interfaces.py"
+  echo "Next:"
+  echo "  python lab/get_interfaces.py          # RESTCONF"
+  echo "  python lab/get_interfaces_netconf.py  # NETCONF (port ${DEVNET_NETCONF_PORT:-830})"
 }
 
 lab_up_containerlab() {
@@ -67,7 +69,9 @@ lab_up_containerlab() {
   sudo containerlab inspect -t "$TOPO"
   echo ""
   echo "    Inventory: $INV_OUT"
-  echo "Next: python lab/automate.py  # when added to the course repo"
+  echo "Next:"
+  echo "  python lab/get_nokia_interfaces.py    # gNMI (node: \${NOKIA_NODE:-spine})"
+  echo "  cat $INV_OUT"
 }
 
 case "$LAB_MODE" in

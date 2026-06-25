@@ -104,7 +104,8 @@ setup_python_venv() {
 make_scripts_executable() {
   chmod +x "$SCRIPT_DIR"/lab-up.sh "$SCRIPT_DIR"/lab-down.sh "$SCRIPT_DIR"/bootstrap.sh
   chmod +x "$SCRIPT_DIR"/wsl-bootstrap.sh "$SCRIPT_DIR"/ec2-bootstrap.sh "$SCRIPT_DIR"/check-prereqs.sh 2>/dev/null || true
-  chmod +x "$SCRIPT_DIR"/gen_inventory.py "$SCRIPT_DIR"/get_interfaces.py 2>/dev/null || true
+  chmod +x "$SCRIPT_DIR"/gen_inventory.py "$SCRIPT_DIR"/get_interfaces.py \
+    "$SCRIPT_DIR"/get_interfaces_netconf.py "$SCRIPT_DIR"/get_nokia_interfaces.py 2>/dev/null || true
 }
 
 print_next_steps() {
@@ -120,7 +121,9 @@ Next (every lab session):
   cp lab/.env.example lab/.env    # paste DevNet creds; set LAB_MODE=containerlab for local NOS
   ./lab/lab-up.sh
   source venv/bin/activate
-  python lab/get_interfaces.py
+  python lab/get_interfaces.py          # DevNet RESTCONF
+  python lab/get_interfaces_netconf.py  # DevNet NETCONF
+  python lab/get_nokia_interfaces.py    # Containerlab gNMI
   ./lab/lab-down.sh               # when using LAB_MODE=containerlab
 
 WSL2: keep the repo under ~/ (not /mnt/c/). Allocate 8GB+ RAM in .wslconfig for Containerlab.
