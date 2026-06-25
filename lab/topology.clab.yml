@@ -1,0 +1,18 @@
+name: multivendor-intro
+
+topology:
+  nodes:
+    nokia-spine:
+      kind: nokia_srlinux
+      image: ghcr.io/nokia/srlinux:latest
+    nokia-leaf:
+      kind: nokia_srlinux
+      image: ghcr.io/nokia/srlinux:latest
+    linux-host:
+      kind: linux
+      image: alpine:latest
+      exec:
+        - apk add -q iproute2 iputils
+  links:
+    - endpoints: ["nokia-spine:e1-1", "nokia-leaf:e1-1"]
+    - endpoints: ["nokia-leaf:e1-2", "linux-host:eth1"]

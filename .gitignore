@@ -1,0 +1,9 @@
+# Ignore everything except lab/
+
+*
+!.gitignore
+!lab/
+!lab/**
+
+# Secrets (still excluded inside lab/)
+lab/.env
